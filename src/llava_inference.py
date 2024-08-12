@@ -1,24 +1,36 @@
+from src.llava_inference.py import LLaVaInference
+from src.utils import load_image, display_image
 
-import torch
-from transformers import AutoProcessor, LlavaForConditionalGeneration, BitsAndBytesConfig
+def main():
+    # Load images
+    image1_url = "https://llava-vl.github.io/static/images/view.jpg"
+    image2_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    
+    image1 = load_image(image1_url)
+    image2 = load_image(image2_url)
+    
+    # Display images (optional, if running in an environment with display capabilities)
+    display_image(image1)
+    display_image(image2)
+    
+    # Define prompts
+    prompts = [
+        "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
+        "USER: <image>\nPlease describe this image\nASSISTANT:"
+    ]
+    
+    # Initialize LLaVa Inference
+    llava_inference = LLaVaInference()
+    
+    # Prepare inputs
+    inputs = llava_inference.prepare_inputs(images=[image1, image2], prompts=prompts)
+    
+    # Generate text
+    generated_texts = llava_inference.generate_text(inputs, max_new_tokens=20)
+    
+    # Output results
+    for text in generated_texts:
+        print(text.split("ASSISTANT:")[-1])
 
-def load_model(model_id="llava-hf/llava-1.5-7b-hf"):
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=torch.float16
-    )
-    processor = AutoProcessor.from_pretrained(model_id)
-    model = LlavaForConditionalGeneration.from_pretrained(
-        model_id,
-        quantization_config=quantization_config,
-        device_map="auto"
-    )
-    return model, processor
-
-def prepare_inputs(processor, images, prompts):
-    inputs = processor(prompts, images=images, padding=True, return_tensors="pt").to("cuda")
-    return inputs
-
-def generate_text(model, inputs, max_new_tokens=20):
-    output = model.generate(**inputs, max_new_tokens=max_new_tokens)
-    return output
+if __name__ == "__main__":
+    main()
