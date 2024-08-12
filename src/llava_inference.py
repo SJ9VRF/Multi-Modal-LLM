@@ -1,36 +1,31 @@
-from src.llava_inference.py import LLaVaInference
-from src.utils import load_image, display_image
+import torch
+from transformers import AutoProcessor, LlavaForConditionalGeneration, BitsAndBytesConfig
 
-def main():
-    # Load images
-    image1_url = "https://llava-vl.github.io/static/images/view.jpg"
-    image2_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    
-    image1 = load_image(image1_url)
-    image2 = load_image(image2_url)
-    
-    # Display images (optional, if running in an environment with display capabilities)
-    display_image(image1)
-    display_image(image2)
-    
-    # Define prompts
-    prompts = [
-        "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
-        "USER: <image>\nPlease describe this image\nASSISTANT:"
-    ]
-    
-    # Initialize LLaVa Inference
-    llava_inference = LLaVaInference()
-    
-    # Prepare inputs
-    inputs = llava_inference.prepare_inputs(images=[image1, image2], prompts=prompts)
-    
-    # Generate text
-    generated_texts = llava_inference.generate_text(inputs, max_new_tokens=20)
-    
-    # Output results
-    for text in generated_texts:
-        print(text.split("ASSISTANT:")[-1])
+class LLaVaInference:
+    def __init__(self, model_id="llava-hf/llava-1.5-7b-hf"):
+        self.model_id = model_id
+        self.processor = None
+        self.model = None
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.load_model()
 
-if __name__ == "__main__":
-    main()
+    def load_model(self):
+        quantization_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_compute_dtype=torch.float16
+        )
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+        self.model = LlavaForConditionalGeneration.from_pretrained(
+            self.model_id,
+            quantization_config=quantization_config,
+            device_map="auto"
+        )
+
+    def prepare_inputs(self, images, prompts):
+        inputs = self.processor(prompts, images=images, padding=True, return_tensors="pt").to(self.device)
+        return inputs
+
+    def generate_text(self, inputs, max_new_tokens=20):
+        output = self.model.generate(**inputs, max_new_tokens=max_new_tokens)
+        generated_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        return generated_text
